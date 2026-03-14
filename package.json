@@ -11,6 +11,7 @@
   "dependencies": {
     "next": "16.1.6",
     "nodemailer": "^8.0.2",
+    "papaparse": "^5.5.3",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
