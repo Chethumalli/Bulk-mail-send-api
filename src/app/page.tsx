@@ -3,57 +3,64 @@
 import { useState } from "react";
 
 export default function Home() {
+
   const [emails, setEmails] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [file, setFile] = useState<File | null>(null);
 
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
+  const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+
+      const rows = text.split("\n").map(r => r.trim());
+
+      const extractedEmails = rows.filter(row =>
+        row.includes("@")
+      );
+
+      setEmails(extractedEmails.join("\n"));
+    };
+
+    reader.readAsText(file);
+  };
+
+
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     setStatus("loading");
     setMessage("");
 
     try {
 
-      let response;
-
-      if (file) {
-        // CSV Upload Mode
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("subject", subject);
-        formData.append("body", body);
-
-        response = await fetch("/api/send", {
-          method: "POST",
-          body: formData
-        });
-
-      } else {
-        // Manual Email Mode
-        response = await fetch("/api/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            emails: emails.split("\n").map(e => e.trim()).filter(Boolean),
-            subject,
-            body
-          })
-        });
-      }
+      const response = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emails: emails.split("\n").map(e => e.trim()).filter(Boolean),
+          subject,
+          body
+        })
+      });
 
       const data = await response.json();
 
       if (response.ok) {
         setStatus("success");
-        setMessage(`Successfully sent ${data.count} emails!`);
+        setMessage(
+        `Successfully sent ${data.sent} emails. Failed: ${data.failed.length}`
+      );
         setEmails("");
         setSubject("");
         setBody("");
-        setFile(null);
       } else {
         setStatus("error");
         setMessage(data.error || "Failed to send emails.");
@@ -67,6 +74,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+
       <div className="w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-3xl p-8 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl relative overflow-hidden">
 
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-32 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none" />
@@ -85,25 +93,28 @@ export default function Home() {
 
             {/* CSV Upload */}
             <div>
+
               <label className="block text-sm font-medium text-neutral-300 mb-2">
-                Upload CSV (Optional)
+                Upload CSV Email List
               </label>
 
               <input
                 type="file"
                 accept=".csv"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                onChange={handleCSVUpload}
                 className="w-full bg-neutral-950/50 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-200"
               />
 
               <p className="text-xs text-neutral-500 mt-2">
-                CSV must contain an <b>email</b> column.
+                Upload a CSV file containing email addresses.
               </p>
+
             </div>
 
 
             {/* Manual Emails */}
             <div>
+
               <label className="block text-sm font-medium text-neutral-300 mb-2">
                 Recipient Emails
               </label>
@@ -117,13 +128,15 @@ export default function Home() {
               />
 
               <p className="text-xs text-neutral-500 mt-2">
-                Enter one email per line (ignored if CSV uploaded).
+                Enter one email per line or upload a CSV email list.
               </p>
+
             </div>
 
 
             {/* Subject */}
             <div>
+
               <label className="block text-sm font-medium text-neutral-300 mb-2">
                 Subject
               </label>
@@ -136,11 +149,13 @@ export default function Home() {
                 required
                 className="w-full bg-neutral-950/50 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
               />
+
             </div>
 
 
             {/* Body */}
             <div>
+
               <label className="block text-sm font-medium text-neutral-300 mb-2">
                 Email Body (HTML supported)
               </label>
@@ -153,11 +168,13 @@ export default function Home() {
                 rows={6}
                 className="w-full bg-neutral-950/50 border border-neutral-800 rounded-xl px-4 py-3 text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
               />
+
             </div>
 
 
             {/* Status */}
             {status !== "idle" && (
+
               <div
                 className={`p-4 rounded-xl flex items-center gap-3 ${
                   status === "success"
@@ -167,21 +184,23 @@ export default function Home() {
                     : "bg-indigo-500/10 border border-indigo-500/20 text-indigo-400"
                 }`}
               >
+
                 {status === "loading" && (
                   <svg className="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                   </svg>
                 )}
 
                 <p className="text-sm font-medium">
                   {status === "loading" ? "Sending emails..." : message}
                 </p>
+
               </div>
+
             )}
 
 
-            {/* Button */}
+            {/* Send Button */}
             <button
               type="submit"
               disabled={status === "loading"}
@@ -191,6 +210,7 @@ export default function Home() {
             </button>
 
           </form>
+
         </div>
       </div>
     </div>

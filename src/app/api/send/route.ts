@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     let body = "";
     let csvRows: any[] = [];
     let csvText = "";
-    let file: File | null = null;   // store uploaded file
+    let file: File | null = null;
 
     const contentType = req.headers.get("content-type");
 
@@ -26,7 +26,10 @@ export async function POST(req: Request) {
       body = formData.get("body") as string;
 
       if (!file) {
-        return NextResponse.json({ error: "CSV file required." }, { status: 400 });
+        return NextResponse.json(
+          { error: "CSV file required." },
+          { status: 400 }
+        );
       }
 
       csvText = await file.text();
@@ -75,7 +78,7 @@ export async function POST(req: Request) {
     }
 
     // =========================
-    // MAIL CONFIG
+    // MAIL CONFIGURATION
     // =========================
     const isSmtpConfigured =
       process.env.SMTP_HOST &&
@@ -134,80 +137,110 @@ export async function POST(req: Request) {
 
     }
 
+    const fromEmail =
+      process.env.SMTP_FROM ||
+      process.env.MAIL_USER ||
+      process.env.SMTP_USER ||
+      "marketing@example.com";
+
     // =========================
     // SEND EMAILS
     // =========================
     let successCount = 0;
+    let failed: string[] = [];
 
+    // -------------------------
+    // CSV PERSONALIZED EMAILS
+    // -------------------------
     if (csvRows.length > 0) {
 
       for (const row of csvRows) {
 
         if (!row.email) continue;
 
-        let personalizedBody = body;
+        try {
 
-        for (const key in row) {
-          personalizedBody = personalizedBody.replace(
-            new RegExp(`{{${key}}}`, "g"),
-            row[key]
-          );
+          let personalizedBody = body;
+
+          for (const key in row) {
+            personalizedBody = personalizedBody.replace(
+              new RegExp(`{{${key}}}`, "g"),
+              row[key]
+            );
+          }
+
+          await transporter.sendMail({
+            from: `"Marketing Team" <${fromEmail}>`,
+            to: row.email,
+            subject: subject,
+            html: personalizedBody,
+
+            attachments: file
+              ? [
+                  {
+                    filename: file.name,
+                    content: csvText,
+                    contentType: "text/csv",
+                  },
+                ]
+              : [],
+          });
+
+          successCount++;
+
+          // delay to prevent spam detection
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+        } catch (err) {
+
+          console.error("Failed to send to:", row.email);
+          failed.push(row.email);
+
         }
-
-        await transporter.sendMail({
-          from: `"Marketing Team" <${
-            process.env.SMTP_FROM ||
-            process.env.MAIL_USER ||
-            process.env.SMTP_USER ||
-            "marketing@example.com"
-          }>`,
-          to: row.email,
-          subject: subject,
-          html: personalizedBody,
-
-          attachments: file
-            ? [
-                {
-                  filename: file.name,   // show original file name
-                  content: csvText,
-                  contentType: "text/csv",
-                },
-              ]
-            : [],
-
-        });
-
-        successCount++;
-
-      }
-
-    } 
-    else {
-
-      for (const email of emails) {
-
-        await transporter.sendMail({
-          from: `"Marketing Team" <${
-            process.env.SMTP_FROM ||
-            process.env.MAIL_USER ||
-            process.env.SMTP_USER ||
-            "marketing@example.com"
-          }>`,
-          to: email,
-          subject: subject,
-          html: body,
-        });
-
-        successCount++;
 
       }
 
     }
 
+    // -------------------------
+    // MANUAL EMAIL LIST
+    // -------------------------
+    else {
+
+      for (const email of emails) {
+
+        try {
+
+          await transporter.sendMail({
+            from: `"Marketing Team" <${fromEmail}>`,
+            to: email,
+            subject: subject,
+            html: body,
+          });
+
+          successCount++;
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+        } catch (err) {
+
+          console.error("Failed to send to:", email);
+          failed.push(email);
+
+        }
+
+      }
+
+    }
+
+    // =========================
+    // RESPONSE
+    // =========================
     return NextResponse.json({
       success: true,
-      message: "Emails sent successfully.",
-      count: successCount,
+      message: "Emails processed",
+      sent: successCount,
+      failed: failed,
     });
 
   } catch (error: any) {
